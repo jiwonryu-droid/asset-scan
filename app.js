@@ -1,7 +1,7 @@
 /* 전산비품 실사 — 모바일 스캐너 (오프라인)
  * 원장은 PC 웹에서 관리. 폰은 "구분 · 관리번호 · 위치"만 기록해 엑셀로 넘긴다.
  */
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 const SITES = ["평택", "용인"];
 
 /* ============================================================ 공통 */
@@ -171,12 +171,15 @@ function renderHome() {
   $("#notices").innerHTML = notes.join("");
   const rec = S.records.slice(-15).reverse();
   $("#recent").innerHTML = rec.length ? rec.map((r) => `<li>${typeBadge(r.type)}<div class="main"><div><b>${esc(r.asset_no)}</b></div>
-      <small>${esc([r.site, r.user_name, r.audit_name].filter(Boolean).join(" · "))}${r.sent ? " · 전송됨" : ""}</small></div>
+      <small>${esc([r.site, r.reason, r.user_name, r.audit_name].filter(Boolean).join(" · "))}${r.sent ? " · 전송됨" : ""}</small></div>
       <small>${esc(r.at.slice(5, 16))}</small></li>`).join("") : `<li class="muted">기록이 없습니다.</li>`;
 }
 
 /* ============================================================ 스캔 */
 const MODE_BADGE = { 입고: "t-in", 출고: "t-out", 실사: "t-audit" };
+const REASONS = { 입고: ["퇴사회수", "교체회수", "포맷완료", "기타"], 출고: ["신규지급", "교체지급", "포맷의뢰", "기타"] };
+const VENDOR = ["포맷의뢰"];
+const curReason = () => $("#exReason .chip2.on")?.dataset.r || "";
 function openScan(mode) {
   S.mode = mode; S.session = [];
   history.pushState({ v: mode }, "");
@@ -184,11 +187,27 @@ function openScan(mode) {
   $("#modeBadge").className = `badge ${MODE_BADGE[mode]}`; $("#modeBadge").textContent = mode;
   renderSites();
   const ex = $("#extra");
-  if (mode === "출고") ex.innerHTML = `<label class="f">출고 대상자 (선택 · 여러 개를 한 사람에게 줄 때 유지)
-      <input id="exUser" placeholder="이름 (비워두면 PC에서 지정)" value="${esc(store.get("out_user"))}"></label>`;
+  const reasons = REASONS[mode];
+  const cur = reasons && (reasons.includes(store.get("reason_" + mode)) ? store.get("reason_" + mode) : reasons[0]);
+  const chips = reasons ? `<div class="lbl">사유</div><div class="chips" id="exReason">${reasons.map((r) =>
+    `<button type="button" class="chip2 ${r === cur ? "on" : ""}" data-r="${r}">${r}</button>`).join("")}</div>` : "";
+  if (mode === "출고") ex.innerHTML = chips + `<label class="f" style="margin-top:10px"><span id="exUserLbl"></span>
+      <input id="exUser" value="${esc(store.get("out_user"))}"></label>`;
   else if (mode === "실사") ex.innerHTML = `<label class="f">실사명 (PC에서 같은 이름끼리 합쳐집니다)
       <input id="exAudit" value="${esc(store.get("audit_name") || ym() + " 정기실사")}"></label>`;
-  else ex.innerHTML = "";
+  else ex.innerHTML = chips;
+  const syncUserLbl = () => {
+    if (mode !== "출고") return;
+    const vendor = VENDOR.includes(curReason());
+    $("#exUserLbl").textContent = vendor ? "업체명 (선택)" : "출고 대상자 (선택 · 여러 개를 한 사람에게 줄 때 유지)";
+    $("#exUser").placeholder = vendor ? "예: OO컴퓨터" : "이름 (비워두면 PC에서 지정)";
+  };
+  $("#exReason")?.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-r]"); if (!b) return;
+    $$("#exReason .chip2").forEach((x) => x.classList.toggle("on", x === b));
+    store.set("reason_" + mode, b.dataset.r); syncUserLbl();
+  });
+  syncUserLbl();
   $("#exUser")?.addEventListener("change", (e) => store.set("out_user", e.target.value.trim()));
   $("#exAudit")?.addEventListener("change", (e) => store.set("audit_name", e.target.value.trim()));
   $("#banner").className = "banner";
@@ -211,17 +230,18 @@ async function onScan(raw) {
       b.className = "banner on dup"; b.innerHTML = `이미 기록됨 — ${esc(code)}<small>${esc(dup.at.slice(11, 16))} ${esc(dup.site)}에서 ${S.mode}</small>`;
       beep(false); return;
     }
+    const reason = S.mode === "실사" ? "" : curReason();
     const rec = { id: uid(), at: nowStr(), type: S.mode, asset_no: code, site: site(), location: site(), worker: Worker.get(),
-      device: "모바일", sent: 0, user_name: user, audit_name: audit, audit_site: S.mode === "실사" ? site() : "" };
+      device: "모바일", sent: 0, reason, user_name: user, audit_name: audit, audit_site: S.mode === "실사" ? site() : "" };
     await DB.put("records", rec); S.records.push(rec); S.session.unshift(rec);
-    b.className = "banner on ok"; b.innerHTML = `${S.mode} 기록 — ${esc(code)}<small>${esc([site(), user, audit].filter(Boolean).join(" · "))}</small>`;
+    b.className = "banner on ok"; b.innerHTML = `${S.mode} 기록 — ${esc(code)}<small>${esc([site(), reason, user, audit].filter(Boolean).join(" · "))}</small>`;
     beep(true); renderSession();
   } finally { S.busy = false; }
 }
 function renderSession() {
   $("#sessionTitle").textContent = `이번 ${S.mode} ${S.session.length}건`;
   $("#sessionList").innerHTML = S.session.length ? S.session.map((r) => `<li data-id="${r.id}"><div class="main"><div><b>${esc(r.asset_no)}</b></div>
-    <small>${esc([r.site, r.user_name, r.audit_name].filter(Boolean).join(" · "))}</small></div>
+    <small>${esc([r.site, r.reason, r.user_name, r.audit_name].filter(Boolean).join(" · "))}</small></div>
     <small>${r.at.slice(11, 16)}</small><button class="x" title="삭제">×</button></li>`).join("") : `<li class="muted">바코드를 찍으세요.</li>`;
 }
 $("#sessionList").onclick = async (e) => {
@@ -234,7 +254,7 @@ $("#sessionList").onclick = async (e) => {
 };
 
 /* ============================================================ 결과 내보내기 */
-const EXPORT_COLS = [["id", "기록ID"], ["at", "일시"], ["type", "구분"], ["asset_no", "관리번호"], ["site", "위치"],
+const EXPORT_COLS = [["id", "기록ID"], ["at", "일시"], ["type", "구분"], ["asset_no", "관리번호"], ["site", "위치"], ["reason", "사유"],
   ["user_name", "사용자명"], ["audit_name", "실사명"], ["audit_site", "실사범위"], ["worker", "작업자"], ["device", "기기"]];
 
 async function exportRecords(all = false) {
