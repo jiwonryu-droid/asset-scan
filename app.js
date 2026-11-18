@@ -1,7 +1,7 @@
 /* 전산비품 실사 — 모바일 스캐너 (오프라인)
  * 원장은 PC 웹에서 관리. 폰은 "구분 · 관리번호 · 위치"만 기록해 엑셀로 넘긴다.
  */
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.3.0";
 const SITES = ["평택", "용인"];
 
 /* ============================================================ 공통 */
@@ -46,8 +46,13 @@ const DB = {
   db: null,
   open() {
     return new Promise((res, rej) => {
-      const r = indexedDB.open("asset-scan", 1);
-      r.onupgradeneeded = () => { const d = r.result; d.createObjectStore("records", { keyPath: "id" }); d.createObjectStore("meta"); };
+      const r = indexedDB.open("asset-scan", 2);
+      r.onupgradeneeded = () => {
+        const d = r.result, have = d.objectStoreNames;
+        if (!have.contains("records")) d.createObjectStore("records", { keyPath: "id" });
+        if (!have.contains("meta")) d.createObjectStore("meta");
+        if (!have.contains("ledger")) d.createObjectStore("ledger", { keyPath: "asset_no" });   // v1.3 조회용 원장
+      };
       r.onsuccess = () => { this.db = r.result; res(); };
       r.onerror = () => rej(r.error);
     });
@@ -66,14 +71,66 @@ const DB = {
   clear: (n) => DB.run(n, "readwrite", (s) => s.clear()),
 };
 
-const S = { records: [], lastExport: null, mode: "", session: [], busy: false };
+const S = { records: [], lastExport: null, mode: "", session: [], busy: false, ledger: new Map(), ledgerMeta: null };
 const site = () => { const v = store.get("site"); return SITES.includes(v) ? v : ""; };
 const pending = () => S.records.filter((r) => !r.sent);
 
 async function loadAll() {
-  const [records, lastExport] = await Promise.all([DB.all("records"), DB.get("meta", "lastExport")]);
+  const [records, lastExport, ledger, ledgerMeta] = await Promise.all([DB.all("records"), DB.get("meta", "lastExport"),
+    DB.all("ledger"), DB.get("meta", "ledger")]);
   S.records = records.sort((a, b) => (a.at < b.at ? -1 : 1)); S.lastExport = lastExport || null;
+  S.ledger = new Map(ledger.map((a) => [a.asset_no, a])); S.ledgerMeta = ledgerMeta || null;
 }
+
+/* ============================================================ 조회용 원장 (PC에서 받은 엑셀) */
+const LEDGER_ALIASES = {
+  asset_no: ["관리번호"], name: ["명칭", "품명"], category: ["장비구분"], status: ["비품상태", "상태"],
+  site: ["공장"], dept: ["부서명"], user_empno: ["사용자", "사번"], user_name: ["사용자명", "성명"],
+  location: ["보관위치", "위치"], model: ["모델명", "사양"], serial_no: ["시리얼번호"],
+};
+function parseLedger(buf, file) {
+  const wb = XLSX.read(buf, { type: "array" });
+  const all = new Set(Object.values(LEDGER_ALIASES).flat());
+  let best = null;
+  for (const sn of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: false, defval: "" });
+    for (let i = 0; i < Math.min(rows.length, 30); i++) {
+      const hdr = rows[i].map((v) => String(v).trim());
+      if (!hdr.includes("관리번호")) continue;
+      const score = hdr.filter((h) => all.has(h)).length;
+      if (score >= 3 && (!best || score > best.score)) best = { score, sn, rows, i, hdr };
+    }
+  }
+  if (!best) throw new Error("'관리번호'가 있는 원장 엑셀이 아닙니다. PC의 [모바일 조회용 원장] 파일을 선택하세요.");
+  const col = {};
+  for (const [f, al] of Object.entries(LEDGER_ALIASES)) { const j = best.hdr.findIndex((h) => al.includes(h)); if (j >= 0) col[f] = j; }
+  const out = new Map();
+  for (const r of best.rows.slice(best.i + 1)) {
+    const no = normNo(r[col.asset_no]); if (!no) continue;
+    const a = { asset_no: no };
+    for (const [f, j] of Object.entries(col)) if (f !== "asset_no") a[f] = String(r[j] ?? "").trim();
+    out.set(no, a);
+  }
+  // 기준시각: 시트명 '원장 2026-11-18 17-30' → 없으면 파일 수정시각
+  const m = best.sn.match(/(\d{4}-\d{2}-\d{2})[ _](\d{2})-(\d{2})/);
+  const base = m ? `${m[1]} ${m[2]}:${m[3]}` : nowStr(new Date(file.lastModified || Date.now())).slice(0, 16);
+  return { assets: [...out.values()], base };
+}
+async function importLedger(file) {
+  try {
+    const r = parseLedger(new Uint8Array(await file.arrayBuffer()), file);
+    if (!r.assets.length) throw new Error("비품 행이 없습니다.");
+    await DB.run("ledger", "readwrite", (s) => { s.clear(); r.assets.forEach((a) => s.put(a)); });
+    S.ledger = new Map(r.assets.map((a) => [a.asset_no, a]));
+    S.ledgerMeta = { file: file.name, base: r.base, count: r.assets.length, at: nowStr() };
+    await DB.put("meta", S.ledgerMeta, "ledger");
+    toast(`조회용 원장 ${r.assets.length.toLocaleString()}건을 불러왔습니다.`); renderHome();
+    if ($(".view.on")?.id === "v-look") renderLookBase();
+  } catch (err) { toast(err.message, "err", 4500); }
+}
+$("#btnLedger").onclick = () => $("#fileLedger").click();
+$("#fileLedger").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importLedger(f); };
+const ledgerLine = (a) => [a.name, a.user_name ? `${a.user_name}${a.dept ? "(" + a.dept + ")" : ""}` : a.dept, a.status].filter(Boolean).join(" · ");
 
 /* ============================================================ 위치 선택 */
 function renderSites() {
@@ -135,9 +192,10 @@ const cam = new Cam("reader", "btnCam", (c) => onScan(c));
 let kbBuf = "", kbAt = 0;
 document.addEventListener("keydown", (e) => {
   if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
-  if ($(".view.on")?.id !== "v-scan") return;
+  const vw = $(".view.on")?.id;
+  if (vw !== "v-scan" && vw !== "v-look") return;
   const t = Date.now(); if (t - kbAt > 300) kbBuf = ""; kbAt = t;
-  if (e.key === "Enter") { if (kbBuf.length >= 3) { onScan(kbBuf); e.preventDefault(); } kbBuf = ""; }
+  if (e.key === "Enter") { if (kbBuf.length >= 3) { vw === "v-look" ? lookShow(normNo(kbBuf), true) : onScan(kbBuf); e.preventDefault(); } kbBuf = ""; }
   else if (e.key.length === 1) kbBuf += e.key;
 });
 
@@ -146,7 +204,7 @@ function show(id, title, back = true) {
   $$(".view").forEach((v) => v.classList.toggle("on", v.id === id));
   $("#title").textContent = title; $("#btnBack").hidden = !back; window.scrollTo(0, 0);
 }
-async function goHome() { S.mode = ""; await cam.stop(); show("v-home", "전산비품 실사", false); renderSites(); renderHome(); }
+async function goHome() { S.mode = ""; await Promise.all([cam.stop(), cam2.stop()]); show("v-home", "전산비품 실사", false); renderSites(); renderHome(); }
 $("#btnBack").onclick = () => history.back();
 window.addEventListener("popstate", goHome);
 function renderWorker() { $("#btnWorker").textContent = "👤 " + (Worker.get() || "작업자 설정"); }
@@ -169,6 +227,9 @@ function renderHome() {
   if (p && S.records.some((r) => !r.sent && Date.now() - new Date(r.at.replace(" ", "T")) > 2 * 864e5))
     notes.push(`<div class="notice warn">2일 넘게 보내지 않은 기록이 있습니다. [결과 보내기]로 PC에 전달하세요.</div>`);
   $("#notices").innerHTML = notes.join("");
+  const lm = S.ledgerMeta;
+  $("#ledgerInfo").innerHTML = lm ? `${lm.count.toLocaleString()}건 · <b>${esc(lm.base)}</b> 기준` : `<span class="muted">불러온 원장 없음 (조회할 때만 필요)</span>`;
+  $("#btnLedger").textContent = lm ? "새로 불러오기" : "원장 불러오기";
   const rec = S.records.slice(-15).reverse();
   $("#recent").innerHTML = rec.length ? rec.map((r) => `<li>${typeBadge(r.type)}<div class="main"><div><b>${esc(r.asset_no)}</b></div>
       <small>${esc([r.site, r.reason, r.user_name, r.audit_name].filter(Boolean).join(" · "))}${r.sent ? " · 전송됨" : ""}</small></div>
@@ -234,13 +295,16 @@ async function onScan(raw) {
     const rec = { id: uid(), at: nowStr(), type: S.mode, asset_no: code, site: site(), location: site(), worker: Worker.get(),
       device: "모바일", sent: 0, reason, user_name: user, audit_name: audit, audit_site: S.mode === "실사" ? site() : "" };
     await DB.put("records", rec); S.records.push(rec); S.session.unshift(rec);
-    b.className = "banner on ok"; b.innerHTML = `${S.mode} 기록 — ${esc(code)}<small>${esc([site(), reason, user, audit].filter(Boolean).join(" · "))}</small>`;
-    beep(true); renderSession();
+    const la = S.ledger.get(code);
+    const ld = !S.ledger.size ? "" : la ? `<small class="ld">원장: ${esc(ledgerLine(la))}</small>` : `<small class="ld">⚠ 원장(${esc(S.ledgerMeta.base)} 기준)에 없는 번호 — 번호를 확인하세요</small>`;
+    b.className = `banner on ${S.ledger.size && !la ? "dup" : "ok"}`;
+    b.innerHTML = `${S.mode} 기록 — ${esc(code)}<small>${esc([site(), reason, user, audit].filter(Boolean).join(" · "))}</small>${ld}`;
+    beep(!(S.ledger.size && !la)); renderSession();
   } finally { S.busy = false; }
 }
 function renderSession() {
   $("#sessionTitle").textContent = `이번 ${S.mode} ${S.session.length}건`;
-  $("#sessionList").innerHTML = S.session.length ? S.session.map((r) => `<li data-id="${r.id}"><div class="main"><div><b>${esc(r.asset_no)}</b></div>
+  $("#sessionList").innerHTML = S.session.length ? S.session.map((r) => `<li data-id="${r.id}"><div class="main"><div><b>${esc(r.asset_no)}</b> ${esc(S.ledger.get(r.asset_no)?.name || "")}</div>
     <small>${esc([r.site, r.reason, r.user_name, r.audit_name].filter(Boolean).join(" · "))}</small></div>
     <small>${r.at.slice(11, 16)}</small><button class="x" title="삭제">×</button></li>`).join("") : `<li class="muted">바코드를 찍으세요.</li>`;
 }
@@ -252,6 +316,57 @@ $("#sessionList").onclick = async (e) => {
   S.records = S.records.filter((x) => x.id !== id); S.session = S.session.filter((x) => x.id !== id);
   renderSession(); toast("삭제했습니다.");
 };
+
+/* ============================================================ 조회 (원장 기준) */
+const cam2 = new Cam("reader2", "btnCam2", (c) => lookShow(normNo(c), true));
+function renderLookBase() {
+  const lm = S.ledgerMeta;
+  $("#lookNoLedger").hidden = !!lm;
+  $("#lookBase").textContent = lm ? `원장 ${lm.count.toLocaleString()}건 · ${lm.base} 기준 (${lm.file}). 그 뒤 PC에서 바뀐 내용은 새 원장을 받아야 보입니다.` : "";
+}
+function openLook() {
+  history.pushState({ v: "look" }, "");
+  show("v-look", "원장 조회");
+  $("#lookResult").innerHTML = ""; $("#lookListCard").hidden = true; $("#lookInput").value = "";
+  renderLookBase();
+  cam2.start();
+}
+$("#btnLook").onclick = openLook;
+function lookShow(no, fromScan = false) {
+  const a = S.ledger.get(no);
+  const mine = S.records.filter((r) => r.asset_no === no).slice(-5).reverse();
+  if (fromScan) beep(!!a || !S.ledger.size);
+  const hist = mine.length ? `<h2 style="margin:12px 0 6px;font-size:14px">이 폰의 기록</h2><ul class="list">${mine.map((r) => `<li>${typeBadge(r.type)}<div class="main">
+      <div>${esc([r.reason, r.user_name, r.audit_name].filter(Boolean).join(" · ") || r.site)}</div><small>${esc(r.site)}${r.sent ? " · 전송됨" : " · 미전송"}</small></div>
+      <small>${esc(r.at.slice(5, 16))}</small></li>`).join("")}</ul>` : "";
+  if (!a) {
+    $("#lookResult").innerHTML = `<div class="banner on dup">원장에 없는 관리번호 — ${esc(no)}<small>${S.ledgerMeta ? `${esc(S.ledgerMeta.base)} 기준 원장에 없습니다. 새로 등록된 비품이면 PC에서 새 원장을 받아 보세요.` : "조회용 원장을 먼저 불러오세요."}</small></div>${hist ? `<div class="card">${hist}</div>` : ""}`;
+    return;
+  }
+  const user = [a.user_empno, a.user_name].filter(Boolean).join(" ");
+  const rows = [["상태", statusBadge(a.status)], ["사용자", esc(user || "-")], ["부서", esc(a.dept || "-")], ["장비구분", esc(a.category)],
+    ["공장", esc(a.site)], ["보관위치", esc(a.location)], ["모델·사양", esc(a.model)], ["시리얼", esc(a.serial_no)]].filter(([, v]) => v && v !== "");
+  $("#lookResult").innerHTML = `<div class="card asset-card"><div class="no">${esc(a.asset_no)}</div><div class="nm">${esc(a.name || "")}</div>
+    <dl class="kv">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>${hist}</div>`;
+}
+const STATUS_CLASS = { 사용중: "s-use", 재고: "s-stock", 예비장비: "s-stock", 수리의뢰: "s-repair", 포맷중: "s-repair", 폐기대상: "s-dispose", 폐기: "s-dead", 폐기완료: "s-dead", 분실: "s-dead" };
+const statusBadge = (s) => `<span class="badge ${STATUS_CLASS[s] || ""}">${esc(s || "-")}</span>`;
+$("#lookForm").onsubmit = (e) => {
+  e.preventDefault();
+  const q = $("#lookInput").value.trim(); $("#lookInput").blur();
+  if (!q) return;
+  if (!S.ledger.size) { renderLookBase(); return toast("조회용 원장을 먼저 불러오세요.", "warn"); }
+  const nq = normNo(q);
+  if (S.ledger.has(nq)) { $("#lookListCard").hidden = true; return lookShow(nq); }
+  const hits = [...S.ledger.values()].filter((a) => a.asset_no.includes(nq) || (a.user_name || "").includes(q) || (a.dept || "").includes(q) || (a.name || "").toUpperCase().includes(nq));
+  $("#lookResult").innerHTML = "";
+  $("#lookListCard").hidden = false;
+  $("#lookListTitle").textContent = `'${q}' 검색 결과 ${hits.length}건${hits.length > 100 ? " (앞 100건)" : ""}`;
+  $("#lookList").innerHTML = hits.slice(0, 100).map((a) => `<li data-no="${esc(a.asset_no)}" style="cursor:pointer"><div class="main">
+      <div><b>${esc(a.asset_no)}</b> ${esc(a.name || "")}</div><small>${esc([a.user_name, a.dept, a.site].filter(Boolean).join(" · "))}</small></div>${statusBadge(a.status)}</li>`).join("")
+    || `<li class="muted">찾는 비품이 없습니다.</li>`;
+};
+$("#lookList").onclick = (e) => { const li = e.target.closest("[data-no]"); if (li) { lookShow(li.dataset.no); window.scrollTo({ top: 0, behavior: "smooth" }); } };
 
 /* ============================================================ 결과 내보내기 */
 const EXPORT_COLS = [["id", "기록ID"], ["at", "일시"], ["type", "구분"], ["asset_no", "관리번호"], ["site", "위치"], ["reason", "사유"],
@@ -291,13 +406,18 @@ $("#btnExport").onclick = () => exportRecords(false);
 /* ============================================================ 관리 */
 async function openMenu() {
   show("v-menu", "관리");
-  let info = `기록 ${S.records.length}건 (미전송 ${pending().length}건)`;
+  let info = `기록 ${S.records.length}건 (미전송 ${pending().length}건)` + (S.ledgerMeta ? `<br>조회용 원장 ${S.ledgerMeta.count.toLocaleString()}건 (${S.ledgerMeta.base} 기준)` : "");
   try {
     if (navigator.storage?.persisted) info += `<br>영구 저장: ${(await navigator.storage.persisted()) ? "허용됨" : "미허용 (홈 화면에 추가 권장)"}`;
   } catch {}
   $("#storageInfo").innerHTML = info;
 }
 $("#mExportAll").onclick = () => exportRecords(true);
+$("#mLedgerDel").onclick = async () => {
+  if (!S.ledger.size) return toast("불러온 원장이 없습니다.", "warn");
+  if (!confirm("폰에 저장된 조회용 원장을 지울까요? (스캔 기록은 그대로)")) return;
+  await DB.clear("ledger"); await DB.del("meta", "ledger"); S.ledger = new Map(); S.ledgerMeta = null; toast("조회용 원장을 지웠습니다."); openMenu();
+};
 $("#mClearSent").onclick = async () => {
   const sent = S.records.filter((r) => r.sent);
   if (!sent.length) return toast("정리할 보낸 기록이 없습니다.", "warn");
