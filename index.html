@@ -24,59 +24,57 @@
   .chip { background: rgba(255,255,255,.16); border: 0; color: #fff; border-radius: 999px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
   .view { display: none; padding: 14px 14px 30px; }
   .view.on { display: block; }
-  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .tile { border: 0; border-radius: 16px; padding: 20px 14px; color: #fff; text-align: left; cursor: pointer; box-shadow: var(--shadow); min-height: 104px;
-          display: flex; flex-direction: column; justify-content: space-between; }
-  .tile b { font-size: 22px; } .tile span { font-size: 13px; opacity: .9; }
-  .tile.in { background: #1f8a4c; } .tile.out { background: #2f6fed; } .tile.audit { background: #7b3fb5; } .tile.look { background: #4a5568; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); margin-top: 12px; }
-  .card h2 { font-size: 15px; margin: 0 0 10px; }
-  .sync { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .sync .n { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .sync .l { font-size: 12px; color: var(--muted); }
-  .sync .btn { width: 100%; margin-top: 8px; padding: 11px; border-radius: 10px; }
-  .pending { color: var(--bad); }
-  .notice { background: var(--warn-bg); color: var(--warn); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.5; margin-top: 12px; }
-  .notice.info { background: var(--info-bg); color: #1d4ea8; }
+  .card:first-child { margin-top: 0; }
+  .card h2 { font-size: 15px; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .lbl { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+
+  /* 위치 선택 */
+  .seg { display: grid; grid-template-columns: repeat(var(--n, 2), 1fr); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
+  .seg button { border: 0; background: none; padding: 13px 8px; font-size: 17px; font-weight: 600; color: var(--muted); cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--primary); color: #fff; }
+  .seg.sm button { padding: 8px; font-size: 15px; }
+
+  .tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .tile { border: 0; border-radius: 16px; padding: 18px 10px; color: #fff; cursor: pointer; box-shadow: var(--shadow); min-height: 96px;
+          display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; }
+  .tile b { font-size: 21px; } .tile span { font-size: 12px; opacity: .9; }
+  .tile.in { background: #1f8a4c; } .tile.out { background: #2f6fed; } .tile.audit { background: #7b3fb5; }
+
+  .sync { display: flex; align-items: center; gap: 12px; }
+  .sync .n { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .sync .n.pending { color: var(--bad); }
+  .sync .btn { margin-left: auto; padding: 12px 18px; border-radius: 10px; font-size: 16px; }
+  .notice { background: var(--info-bg); color: #1d4ea8; border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.5; margin-bottom: 12px; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); }
+
   .list { list-style: none; margin: 0; padding: 0; }
-  .list li { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .list li { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
   .list li:last-child { border-bottom: 0; }
   .list .main { flex: 1; min-width: 0; }
   .list .main div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .list small { color: var(--muted); font-size: 12px; }
-  .reader-wrap { background: #000; border-radius: 14px; overflow: hidden; position: relative; min-height: 220px; }
+  .x { border: 0; background: none; color: var(--muted); font-size: 22px; padding: 0 4px; cursor: pointer; }
+
+  /* 스캔 */
+  .modebar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .modebar .badge { font-size: 15px; padding: 6px 12px; }
+  .extra { margin-bottom: 10px; }
+  .reader-wrap { background: #000; border-radius: 14px; overflow: hidden; position: relative; min-height: 200px; }
   .reader { width: 100%; }
   .reader video { width: 100% !important; display: block; }
   .reader-msg { color: #fff; padding: 40px 18px; text-align: center; font-size: 14px; line-height: 1.6; }
-  .cam-ctrl { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; z-index: 5; }
+  .cam-ctrl { position: absolute; right: 10px; top: 10px; z-index: 5; }
   .cam-ctrl button { background: rgba(0,0,0,.55); color: #fff; border: 0; border-radius: 999px; padding: 6px 12px; font-size: 13px; }
   .manual { display: flex; gap: 8px; margin-top: 10px; }
   .manual input { flex: 1; text-transform: uppercase; }
-  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
-  .sheet-bg { position: fixed; inset: 0; background: rgba(10,16,28,.45); z-index: 200; display: none; }
-  .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 201; background: var(--panel); border-radius: 18px 18px 0 0; max-height: 88vh; overflow: auto;
-           padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); transform: translateY(105%); transition: transform .22s ease; }
-  .sheet.on { transform: none; } .sheet-bg.on { display: block; }
-  .sheet .grip { width: 40px; height: 5px; border-radius: 3px; background: #ccd2dc; margin: 4px auto 12px; }
-  .asset-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-  .asset-no { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
-  .asset-name { color: var(--muted); margin-top: 2px; }
-  .kv { display: grid; grid-template-columns: 76px 1fr; gap: 6px 10px; font-size: 14px; margin: 12px 0; }
-  .kv dt { color: var(--muted); } .kv dd { margin: 0; word-break: break-all; }
-  .form { display: grid; gap: 10px; margin-top: 8px; }
-  .form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .actions { display: flex; gap: 10px; margin-top: 14px; }
-  .actions .btn { flex: 1; padding: 13px; font-size: 16px; border-radius: 12px; }
-  .notfound { background: var(--bad-bg); color: var(--bad); border-radius: 10px; padding: 12px; font-weight: 600; }
-  .progress { height: 12px; background: var(--gray-bg); border-radius: 999px; overflow: hidden; margin: 8px 0 4px; }
-  .progress > div { height: 100%; background: #7b3fb5; width: 0; transition: width .3s; }
-  .stat-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
-  .banner { border-radius: 12px; padding: 14px; margin-top: 10px; font-weight: 600; display: none; }
+  .banner { border-radius: 12px; padding: 14px; margin-top: 10px; font-weight: 600; font-size: 17px; display: none; }
   .banner.on { display: block; }
-  .banner.정상 { background: var(--ok-bg); color: var(--ok); } .banner.범위외 { background: var(--warn-bg); color: var(--warn); }
-  .banner.미등록 { background: var(--bad-bg); color: var(--bad); } .banner.중복 { background: var(--gray-bg); color: #555; }
-  .banner small { display: block; font-weight: 400; margin-top: 3px; opacity: .85; }
-  .x { border: 0; background: none; color: var(--muted); font-size: 20px; padding: 0 4px; }
+  .banner.ok { background: var(--ok-bg); color: var(--ok); }
+  .banner.dup { background: var(--warn-bg); color: var(--warn); }
+  .banner small { display: block; font-weight: 400; font-size: 13px; margin-top: 3px; opacity: .85; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
   .menu .btn { width: 100%; text-align: left; padding: 13px 14px; border-radius: 10px; margin-top: 8px; }
   .ver { text-align: center; font-size: 12px; color: var(--muted); margin-top: 18px; }
 </style>
@@ -92,89 +90,64 @@
 <section class="view on" id="v-home">
   <div id="notices"></div>
   <div class="card">
-    <div class="sync">
-      <div><div class="l">비품 원장</div><div class="n" id="cntAssets">0</div><div class="l" id="ledgerInfo">불러온 원장 없음</div>
-        <button class="btn" id="btnLoad">원장 불러오기</button></div>
-      <div><div class="l">보내지 않은 기록</div><div class="n" id="cntPending">0</div><div class="l" id="lastExport">&nbsp;</div>
-        <button class="btn primary" id="btnExport">결과 보내기</button></div>
-    </div>
+    <div class="lbl">현재 위치</div>
+    <div class="seg site-seg" id="siteHome"></div>
   </div>
-  <div class="card" id="auditCard" hidden></div>
-  <div class="tiles" style="margin-top:12px">
-    <button class="tile in" data-go="입고"><b>입고</b><span>회수·신규 → 재고</span></button>
+  <div class="tiles">
+    <button class="tile in" data-go="입고"><b>입고</b><span>회수·신규</span></button>
     <button class="tile out" data-go="출고"><b>출고</b><span>사용자 지급</span></button>
-    <button class="tile audit" data-go="실사"><b>실사</b><span>연속 스캔 확인</span></button>
-    <button class="tile look" data-go="조회"><b>조회</b><span>비품 정보·기록</span></button>
+    <button class="tile audit" data-go="실사"><b>실사</b><span>재고 확인</span></button>
   </div>
   <div class="card">
-    <h2 style="display:flex;justify-content:space-between">최근 기록 <button class="btn sm" id="btnMenu">관리</button></h2>
+    <div class="sync">
+      <div><div class="lbl" style="margin:0">보내지 않은 기록</div><div class="n" id="cntPending">0</div></div>
+      <button class="btn primary" id="btnExport">결과 보내기</button>
+    </div>
+    <div class="hint" id="lastExport"></div>
+  </div>
+  <div class="card">
+    <h2>최근 기록 <button class="btn sm" id="btnMenu">관리</button></h2>
     <ul class="list" id="recent"></ul>
   </div>
   <div class="ver" id="ver"></div>
-  <input type="file" id="fileLedger" accept=".xlsx,.xls,.csv" hidden>
 </section>
 
-<!-- 스캔 (입고/출고/조회) -->
+<!-- 스캔 -->
 <section class="view" id="v-scan">
+  <div class="modebar"><span class="badge" id="modeBadge"></span><div class="seg sm site-seg" id="siteScan" style="flex:1"></div></div>
+  <div class="extra" id="extra"></div>
   <div class="reader-wrap"><div class="reader" id="reader"></div><div class="cam-ctrl"><button id="btnCam">카메라 끄기</button></div></div>
   <form class="manual" id="manualForm" autocomplete="off">
     <input id="manualInput" placeholder="관리번호 직접 입력" enterkeyhint="go" autocapitalize="characters">
-    <button class="btn primary">확인</button>
+    <button class="btn primary">추가</button>
   </form>
-  <p class="hint">블루투스/PDA 스캐너도 바로 인식됩니다. 인터넷이 없어도 동작합니다.</p>
-  <div class="card" id="sessionCard" hidden><h2 id="sessionTitle"></h2><ul class="list" id="sessionList"></ul></div>
-</section>
-
-<!-- 실사 -->
-<section class="view" id="v-audit">
-  <div id="auditPick"></div>
-  <div id="auditRun" hidden>
-    <div class="card" style="margin-top:0">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b id="auName"></b><span class="badge" id="auSite"></span></div>
-      <div class="progress"><div id="auBar"></div></div>
-      <div class="stat-row"><span id="auStat"></span><span id="auPct"></span></div>
-    </div>
-    <div class="reader-wrap" style="margin-top:12px"><div class="reader" id="reader2"></div><div class="cam-ctrl"><button id="btnCam2">카메라 끄기</button></div></div>
-    <form class="manual" id="manualForm2" autocomplete="off">
-      <input id="manualInput2" placeholder="관리번호 직접 입력" enterkeyhint="go" autocapitalize="characters">
-      <button class="btn primary">확인</button>
-    </form>
-    <label class="f" style="margin-top:10px">스캔 위치 (선택 · 계속 유지)<input id="auLoc" placeholder="예: 평택 2층 사무실"></label>
-    <div class="banner" id="auBanner"></div>
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h2 style="margin:0">스캔 내역</h2>
-        <span><button class="btn sm" id="btnMissing">미확인 목록</button> <button class="btn sm danger" id="btnEndAudit">실사 종료</button></span>
-      </div>
-      <ul class="list" id="auScans"></ul>
-    </div>
+  <div class="banner" id="banner"></div>
+  <div class="card">
+    <h2 id="sessionTitle">스캔 내역</h2>
+    <ul class="list" id="sessionList"></ul>
   </div>
+  <p class="hint">찍으면 바로 기록됩니다. 잘못 찍었으면 ×로 지우세요. 블루투스/PDA 스캐너도 사용할 수 있습니다.</p>
 </section>
 
 <!-- 관리 -->
 <section class="view menu" id="v-menu">
-  <div class="card" style="margin-top:0">
+  <div class="card">
     <h2>데이터 관리</h2>
     <button class="btn" id="mExportAll">전체 기록 다시 내보내기 (보낸 기록 포함)</button>
     <button class="btn" id="mClearSent">보낸 기록 정리 (폰에서 삭제)</button>
-    <button class="btn" id="mLedger">원장 다시 불러오기</button>
-    <button class="btn danger" id="mReset">전체 초기화 (원장·기록 모두 삭제)</button>
+    <button class="btn danger" id="mReset">전체 초기화</button>
   </div>
   <div class="card">
     <h2>사용 방법</h2>
     <ol style="margin:0;padding-left:20px;line-height:1.7;font-size:14px">
-      <li>PC 프로그램 → 비품원장 → <b>엑셀 다운로드</b> 파일을 폰으로 받습니다 (메일/메신저).</li>
-      <li>여기서 <b>원장 불러오기</b>로 그 파일을 선택합니다.</li>
-      <li>입고·출고·실사를 스캔합니다. 인터넷이 없어도 됩니다.</li>
-      <li><b>결과 보내기</b>로 엑셀을 만들어 메일/메신저로 PC에 보냅니다.</li>
-      <li>PC 프로그램 → <b>모바일 결과 업로드</b>로 반영합니다. 같은 파일을 두 번 올려도 중복되지 않습니다.</li>
+      <li><b>위치</b>(평택/용인)를 고릅니다.</li>
+      <li><b>입고 / 출고 / 실사</b> 중 하나를 누르고 바코드를 연속으로 찍습니다.</li>
+      <li><b>결과 보내기</b>로 엑셀을 만들어 회사 메일로 PC에 보냅니다.</li>
+      <li>PC 프로그램 → 대시보드 → <b>모바일 결과 업로드</b>로 반영합니다. 같은 파일을 두 번 올려도 중복되지 않습니다.</li>
     </ol>
   </div>
   <div class="card"><h2>저장 상태</h2><div id="storageInfo" class="muted" style="font-size:14px"></div></div>
 </section>
-
-<div class="sheet-bg" id="sheetBg"></div>
-<div class="sheet" id="sheet"><div class="grip"></div><div id="sheetBody"></div></div>
 
 <script src="vendor/html5-qrcode.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>

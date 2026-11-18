@@ -1,6 +1,6 @@
 /* 오프라인 캐시 — 앱 파일을 폰에 저장해 인터넷 없이 실행
  * 화면을 수정해 배포할 때 VERSION 값을 올리면 폰이 새 파일을 받습니다. */
-const VERSION = "asset-offline-v1.0.0";
+const VERSION = "asset-scan-v1.1.0";
 const FILES = ["./", "index.html", "app.js", "app.css", "manifest.json", "icon.svg", "icon-180.png", "icon-192.png", "icon-512.png",
   "vendor/html5-qrcode.min.js", "vendor/xlsx.full.min.js"];
 
